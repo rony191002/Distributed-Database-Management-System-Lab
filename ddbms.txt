@@ -1,0 +1,356 @@
+1) First Download docker then install docker in pc
+2) docker run hello-world [Open CMD and run this command , for these reasons make 'hello_word' inside the docker image]
+3) docker –version [check docker version]
+4) docker pull macio232/hadoop-pseudo-distributed-mode [4,5 create container and set name 'myHadoop']
+5) docker run -p 9870:9870 -p 8088:8088 -it --name=myHadoop macio232/hadoop-pseudo-distributed-mode
+
+After complete thise 5 step in first time then you follow from step [6] everytime   
+   ["docker stop myHadoop"   [after complete my work , i enter terminal ‘+’ icome then run this command ; then its back from linux fiture, ]]
+
+6) docker container start -i myHadoop
+7) mkdir /test ["mkdir test"]
+8) cd test [goto test folder]
+9) ls [check the 'test' file create or not]   ["rm -rf /test" for delete test file]
+10) hive [Now go inside to HIVE]
+11) show databases; [Show the database]
+12) CREATE DATABASE IF NOT EXISTS education_db;
+13) DROP DATABASE education_db CASCADE;
+14) use education_db;
+15) show tables;
+16) DROP TABLE student_results;
+17) quit; [from hive to root]
+18) hdfs dfs -ls /TeacherDetail/ [check where it store]
+----------------------------------------------------------------------------------------------
+CREATE DATABASE IF NOT EXISTS education_db;
+
+
+CREATE TABLE IF NOT EXISTS education_db.student_results (
+    student_id INT,
+    subject_code STRING,
+    marks INT,
+    grade STRING
+)
+PARTITIONED BY (
+    exam_year INT,
+    exam_session STRING
+)
+STORED AS PARQUET
+LOCATION '/TeacherDetail/Result';
+
+
+
+CREATE TABLE IF NOT EXISTS education_db.result_tmp (
+    student_id INT,
+    subject_code STRING,
+    marks INT,
+    grade STRING,
+    exam_year INT,
+    exam_session STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+LOCATION '/TeacherDetail/Result_tmp';
+
+
+desc student_results;
+----------------------------------------------------------------------------------------------
+
+15) docker cp "C:\Users\Md.Rony Hossain\Downloads\result.csv" myHadoop:/test            [another CMD]   docker cp "F:\result.csv" myHadoop:/test
+ docker cp "F:\DDBMS\student_results.csv" myHadoop:/test
+
+    docker cp "F:\DDBMS\students.csv" myHadoop:/test
+    docker cp "F:\DDBMS\courses.csv" myHadoop:/test
+
+
+16) LOAD DATA LOCAL INPATH '/test/student_results.csv' INTO TABLE education_db.result_tmp;
+    LOAD DATA LOCAL INPATH '/test/students.csv' INTO TABLE education_db.students;
+    LOAD DATA LOCAL INPATH '/test/courses.csv' INTO TABLE education_db.courses;
+
+    
+17) SELECT * FROM education_db.result_tmp;
+-----------------------------------------------
+
+
+18) set hive.exec.dynamic.partition=true; [for partitioning]
+19) set hive.exec.dynamic.partition.mode=nonstrict;
+
+
+INSERT OVERWRITE TABLE education_db.student_results 
+PARTITION (exam_year, exam_session)
+SELECT student_id, subject_code, marks, grade, exam_year, exam_session
+FROM education_db.result_tmp;
+
+
+SELECT * FROM education_db.student_results;
+
+DROP TABLE education_db.result_tmp;
+
+SHOW PARTITIONS education_db.student_results;
+MSCK REPAIR TABLE education_db.student_results;
+
+
+
+
+Q3 — Add a new Partition: Write Hive commands to add a partition (exam_year=2025, exam_session='Spring') to the student_results table
+------------------------------------------------------------------------------------------------------------------------------------------
+
+ALTER TABLE education_db.student_results
+ADD PARTITION (exam_year=2022, exam_session='Fall')
+LOCATION '/Test/Result';
+
+SHOW PARTITIONS education_db.student_results;
+
+MSCK REPAIR TABLE education_db.student_results;
+
+
+
+Q4 — Data Insertion into Specific Partition: Insert 4 new records for the above partition. After that verify the insertion.
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+INSERT INTO TABLE education_db.student_results
+PARTITION (exam_year=2020, exam_session='Spring')
+VALUES 
+(1071,'CSE101',92,'A+'),
+(1072,'CSE102',78,'B+'),
+(1073,'CSE103',85,'A'),
+(1074,'CSE104',67,'B');
+select * from education_db.student_results where exam_year=2020 and exam_session='Spring';
+
+
+SELECT *
+FROM education_db.student_results
+WHERE exam_year=2025
+  AND exam_session='Fall';
+
+
+
+Q5 — Drop Partition: Write Hive commands to drop the partition (exam_year=2022, exam_session='Fall') from the student_results table.
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+ALTER TABLE education_db.student_results
+DROP PARTITION (exam_year=2020, exam_session='Spring');
+
+SHOW PARTITIONS education_db.student_results;
+
+MSCK REPAIR TABLE education_db.student_results;
+
+
+
+
+
+
+"We need two more tables(students, courses) to execute next queries, So we will create that tables now"
+
+============================= students, courses table creation ======================================
+
+CREATE TABLE IF NOT EXISTS education_db.students (
+    student_id INT,
+    student_name STRING,
+    dob STRING,
+    department STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION '/Test/Student';
+
+docker cp "F:\DDBMS\students.csv" myHadoop:/test
+LOAD DATA LOCAL INPATH '/test/students.csv' INTO TABLE education_db.students;
+select * from education_db.students;
+
+
+CREATE TABLE IF NOT EXISTS education_db.courses (
+    course_id INT,
+    course_name STRING,
+    credits INT,
+    department STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION '/Test/Course';
+
+docker cp "F:\DDBMS\courses.csv" myHadoop:/test
+LOAD DATA LOCAL INPATH '/test/courses.csv' INTO TABLE education_db.courses;
+select * from education_db.courses;
+
+
+================================== students table created =====================================
+
+
+
+
+Q6 — Query with Partition Filtering: Write a Hive query to display records of students who appeared in the exam_year=2023 and exam_session='Fall'.
+
+
+SELECT 
+    sr.student_id,
+    s.student_name,
+    s.dob,
+    s.department,
+    sr.subject_code,
+    sr.marks,
+    sr.grade,
+    sr.exam_year,
+    sr.exam_session
+FROM education_db.student_results sr
+JOIN education_db.students s
+ON sr.student_id=s.student_id
+WHERE 
+    sr.exam_year=2023 AND sr.exam_session='Fall';
+
+
+
+Q8 — Join Query: Write a Hive query to display student_name, course_name, marks for all students in the Computer Science department.
+
+SELECT 
+    s.student_name,
+    c.course_name,
+    sr.marks
+FROM education_db.student_results sr
+JOIN education_db.students s 
+ON sr.student_id = s.student_id
+JOIN education_db.courses c 
+ON sr.subject_code = c.course_name
+WHERE s.department = 'Computer Science';
+
+
+Q9 — Aggregation: Find the average marks per department for the exam_year 2025.
+
+SELECT
+    s.department,
+    AVG(sr.marks) AS avg_marks
+FROM education_db.student_results sr
+JOIN education_db.students s
+    ON sr.student_id = s.student_id
+WHERE sr.exam_year = 2025
+GROUP BY s.department;
+
+
+
+Q10 — Top Scorer Query: Write a Hive query to find the student(s) with the highest marks in the Spring 2025 session.
+Find the maximum marks in Spring 2025
+
+WITH max_marks_cte AS (
+    SELECT MAX(marks) AS max_marks
+    FROM education_db.student_results
+    WHERE exam_year = 2025 AND exam_session = 'Fall' 
+)
+SELECT 
+    sr.student_id,
+    s.student_name,
+    sr.subject_code,
+    sr.marks
+FROM education_db.student_results sr
+JOIN max_marks_cte mm 
+    ON sr.marks = mm.max_marks
+JOIN education_db.students s 
+    ON sr.student_id = s.student_id
+WHERE sr.exam_year = 2025 AND sr.exam_session = 'Fall';
+
+
+
+
+
+Necessary Commands
+-------------------- 
+DROP TABLE education_db.studens;
+DROP DATABASE education_db;
+SHOW TABLES IN education_db;
+hdfs dfs -rm -r /TeacherDetail/Result/exam_year=__HIVE_DEFAULT_PARTITION__
+
+
+
+
+
+**************************************************************************************************************************************************
+
+docker container start -i  myHadoop 
+
+mkdir data
+cd data
+  
+vi WordCount.java
+
+import java.io.IOException;
+import java.util.StringTokenizer;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class WordCount {
+
+    // Mapper class
+    public static class TokenizerMapper
+            extends Mapper<Object, Text, Text, IntWritable> {
+
+        private final static IntWritable one = new IntWritable(1);
+        private Text word = new Text();
+
+        public void map(Object key, Text value, Context context)
+                throws IOException, InterruptedException {
+            StringTokenizer itr = new StringTokenizer(value.toString());
+            while (itr.hasMoreTokens()) {
+                word.set(itr.nextToken());
+                context.write(word, one);
+            }
+        }
+    }
+
+    // Reducer class
+    public static class IntSumReducer
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
+
+        public void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
+        }
+    }
+
+    // Driver code
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "word count");
+
+        job.setJarByClass(WordCount.class);
+        job.setMapperClass(TokenizerMapper.class);
+        job.setCombinerClass(IntSumReducer.class);
+        job.setReducerClass(IntSumReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
+
+
+
+
+javac -classpath $(hadoop classpath) -d . WordCount.java 
+jar cf wordcount.jar WordCount*.class
+
+echo "hadoop mapreduce hadoop hadoop bigdata bigdata spark" > input2.txt
+
+hdfs dfs -mkdir -p /input
+hdfs dfs -put input2.txt /input/ 
+hdfs dfs -rm -r /output 
+
+
+hadoop jar wordcount.jar WordCount /input /output
+hdfs dfs -cat /output/part-r-00000
+
